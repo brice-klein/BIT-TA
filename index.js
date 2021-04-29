@@ -17,42 +17,110 @@ const pool = new Pool({
 app.use(cors())
 app.use(bodyParser.json())
 
-async function getData = () {
+async function getData() {
   try {
     const res = await pool.query(
-
+      "SELECT * FROM track_points",
+      (err, res) => {
+        if (err) {
+          throw err
+        }
+        console.log('getData, res- ', res.rows[0])
+        return JSON.stringify(res.rows)
+      }
     )
+  } catch (err) {
+    return err.stack
   }
 }
 
-app.get('/', (req, result) => {
-  let rawData = await pool.query(
-    "SELECT * FROM track_points",
-    (err, res) => {
-      if (err) {
-        throw err
-      }
-      console.log('Data fetch success', new Date())
-      result.send(JSON.stringify(res.rows))
-    })
+async function getDist(locationOneLatLon, locationTwoLatLon) {
+  const query = "SELECT ST_DISTANCE" +
+    "(ST_GeographyFromText('POINT(" + `${locationOneLatLon[0]} ` + `${locationOneLatLon[1]}` + ")')," +
+    "ST_GeographyFromText('POINT(" + `${locationTwoLatLon[0]} ` + `${locationTwoLatLon[1]}` + ")'));"
+  try {
+    var dist = await pool.query(
+      query
+    )
+      .then((data) => {
+        return data.rows[0].st_distance
+      })
+  } catch (err) {
+    return err.stack
+  }
+  console.log("getDist, var dist- ", dist)
+  return dist
+}
+
+app.get('/222', async (req, result) => {
+  var rawData = [] //await getData()
   let stateTotals = {}
-  rawData.forEach((point, index, rawData) => {
-    let stateLatLon = [rawData[index].lat, rawData[index].lon]
-    let nextStateLatLon = [rawData[index + 1].lat, rawData[index + 1].lon]
-    const query = "SELECT ST_DISTANCE" +
-      "(ST_GeographyFromText('POINT(" + `${stateLatLon[0]} ` + `${stateLatLon[1]}` + ")')," +
-      "ST_GeographyFromText('POINT(" + `${nextStateLatLon[0]} ` + `${nextStateLatLon[1]}` + ")'));"
+  pool.query("SELECT * FROM track_points")
+    .then(res => {
+      console.log('res.rows[0]', res.rows[0])
+      rawData = res.rows
+      console.log('rawData-', rawData[0])
+      // rawData = JSON.parse(rawData)
+      for (var i = 0; i < rawData.length; i++) {
+        console.log('forLoop rawData- ', rawData[i])
 
-    var stateName = reverse.lookup(rawData[index].lat, rawData[index].lon, 'us').state
-    var nextStateName = reverse.lookup(rawData[index + 1].lat, rawData[index + 1].lon, 'us').state
+        var stateName = reverse.lookup(rawData[i].lat, rawData[i].lon, 'us').state
+        var nextStateName = reverse.lookup(rawData[i + 1].lat, rawData[i + 1].lon, 'us').state
 
-    if (stateName === nextStateName) {
-      var dist = await pool.query(query)
-      if (stateTotals[stateName]) {
-        stateTotals[stateName] +=
+        console.log('stateName- ', stateName, '|| nextStateName- ', nextStateName)
+        if (stateName === nextStateName) {
+          let stateLatLon = [rawData[i].lat, rawData[i].lon]
+          let nextStateLatLon = [rawData[i + 1].lat, rawData[i + 1].lon]
+          const query = "SELECT ST_DISTANCE" +
+            "(ST_GeographyFromText('POINT(" + `${stateLatLon[0]} ` + `${stateLatLon[1]}` + ")')," +
+            "ST_GeographyFromText('POINT(" + `${nextStateLatLon[0]} ` + `${nextStateLatLon[1]}` + ")'));"
+          console.log('equality test- ', stateName === nextStateName)
+          var dist //= await getDist(stateLatLon, nextStateLatLon)
+          pool.query(query)
+            .then(res => {
+              console.log('st_distance query- ', res.rows[0])
+              dist = res.rows[0].st_distance
+              console.log('st_distance- ', dist)
+              if (stateTotals[stateName]) {
+                stateTotals[stateName] += dist
+              } else {
+                stateTotals[stateName] = dist
+              }
+            })
         }
-    }
-  })
+        console.log('stateTotals- ', stateTotals)
+        continue
+      }
+    })
+    .then(res => {
+      result.status(200).send(JSON.stringify(stateTotals))
+    })
+  // rawData.forEach((point, index, rawData) => {
+  //   let stateLatLon = [rawData[index].lat, rawData[index].lon]
+  //   let nextStateLatLon = [rawData[index + 1].lat, rawData[index + 1].lon]
+  //   const query = "SELECT ST_DISTANCE" +
+  //     "(ST_GeographyFromText('POINT(" + `${stateLatLon[0]} ` + `${stateLatLon[1]}` + ")')," +
+  //     "ST_GeographyFromText('POINT(" + `${nextStateLatLon[0]} ` + `${nextStateLatLon[1]}` + ")'));"
+
+  //   var stateName = reverse.lookup(rawData[index].lat, rawData[index].lon, 'us').state
+  //   var nextStateName = reverse.lookup(rawData[index + 1].lat, rawData[index + 1].lon, 'us').state
+
+  //   if (stateName === nextStateName) {
+  //     var dist = await getDist(stateLatLon, nextStateLatLon)
+  //     if (stateTotals[stateName]) {
+  //       stateTotals[stateName] += 1
+  //     }
+  //   }
+  // })
+})
+
+app.get('/test', async (req, result) => {
+  const query = "SELECT ST_DISTANCE" +
+    "(ST_GeographyFromText('POINT(" + `38.413551 ` + `-82.577080` + ")')," +
+    "ST_GeographyFromText('POINT(" + `38.412350 ` + `-82.575912` + ")'));"
+  var dist = await getDist([`38.413551 `, `-82.577080`], [`38.412350 `, `-82.575912`])
+  console.log(dist)
+  result.status(200).send(JSON.stringify(dist))
 })
 
 app.get('/stateDist', (req, result) => {
