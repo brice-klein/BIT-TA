@@ -59,10 +59,10 @@ app.get('/222', async (req, result) => {
     .then(res => {
       console.log('res.rows[0]', res.rows[0])
       rawData = res.rows
-      console.log('rawData-', rawData[0])
       // rawData = JSON.parse(rawData)
+      console.log('rawData-', rawData[0])
       for (var i = 0; i < rawData.length; i++) {
-        console.log('forLoop rawData- ', rawData[i])
+        console.log(i, ' forLoop rawData- ', rawData[i])
 
         var stateName = reverse.lookup(rawData[i].lat, rawData[i].lon, 'us').state
         var nextStateName = reverse.lookup(rawData[i + 1].lat, rawData[i + 1].lon, 'us').state
@@ -76,25 +76,40 @@ app.get('/222', async (req, result) => {
             "ST_GeographyFromText('POINT(" + `${nextStateLatLon[0]} ` + `${nextStateLatLon[1]}` + ")'));"
           console.log('equality test- ', stateName === nextStateName)
           var dist //= await getDist(stateLatLon, nextStateLatLon)
-          pool.query(query)
-            .then(res => {
-              console.log('st_distance query- ', res.rows[0])
-              dist = res.rows[0].st_distance
-              console.log('st_distance- ', dist)
-              if (stateTotals[stateName]) {
-                stateTotals[stateName] += dist
-              } else {
-                stateTotals[stateName] = dist
-              }
-            })
+          pool.query(query, (err, res) => {
+            pool.release()
+            console.log('second pool- ', res)
+            if (err) {
+              throw err
+            }
+
+            console.log('st_distance query- ', res.rows[0])
+            dist = res.rows[0].st_distance
+            console.log('st_distance- ', dist)
+            if (stateTotals[stateName]) {
+              stateTotals[stateName] += dist
+            } else {
+              stateTotals[stateName] = dist
+            }
+
+          })
+          // .then(res => {
+          //   console.log('st_distance query- ', res.rows[0])
+          //   dist = res.rows[0].st_distance
+          //   console.log('st_distance- ', dist)
+          //   if (stateTotals[stateName]) {
+          //     stateTotals[stateName] += dist
+          //   } else {
+          //     stateTotals[stateName] = dist
+          //   }
+          // })
         }
         console.log('stateTotals- ', stateTotals)
         continue
       }
     })
-    .then(res => {
-      result.status(200).send(JSON.stringify(stateTotals))
-    })
+  result.status(200).send(JSON.stringify(stateTotals))
+
   // rawData.forEach((point, index, rawData) => {
   //   let stateLatLon = [rawData[index].lat, rawData[index].lon]
   //   let nextStateLatLon = [rawData[index + 1].lat, rawData[index + 1].lon]
